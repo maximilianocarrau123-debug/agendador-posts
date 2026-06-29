@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agendador · Merge</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300;1,9..144,600&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="./config.js"></script>
+<style>
+  @font-face{font-family:'VCR';src:url('./VCR.ttf') format('truetype');}
+  :root{--bg:#262624;--bg2:#2E2D2A;--bg3:#35332F;--cream:#F0EEE6;--t2:#B0AEA5;--t3:#8E8D86;--coral:#D97757;--coralh:#E08A6E;--coralp:#B85A38;--bd:#3A3936;}
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--cream);font-family:'Instrument Sans',ui-sans-serif,system-ui;margin:0}
+  .serif{font-family:'Fraunces',serif}.mono{font-family:'IBM Plex Mono',monospace}
+  .vcr{font-family:'VCR';font-style:normal;font-size:0.86em;vertical-align:-0.05em;margin:0 0.02em;color:var(--coral);display:inline-block}
+  .kicker{font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:0.1em;color:var(--t3);font-size:11px}
+  .card{background:var(--bg2);border:1px solid var(--bd);border-radius:18px}
+  label.f{display:block;margin-bottom:14px}
+  .lbl{font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:0.07em;font-size:10.5px;color:var(--t3);margin-bottom:5px;display:block}
+  input,textarea,select{background:var(--bg);border:1px solid var(--bd);border-radius:11px;padding:11px 13px;color:var(--cream);width:100%;font-family:'Instrument Sans';font-size:14px}
+  input::placeholder,textarea::placeholder{color:#6b6a64}
+  input:focus,textarea:focus{outline:none;border-color:var(--coral)}
+  input[type=file]{padding:9px;font-family:'IBM Plex Mono';font-size:12px;color:var(--t2)}
+  ::-webkit-calendar-picker-indicator{filter:invert(0.8) sepia(1) saturate(3) hue-rotate(330deg)}
+  .btn{background:var(--coral);color:#221c19;font-weight:600;border:none;border-radius:12px;padding:13px;width:100%;cursor:pointer;font-family:'Instrument Sans';font-size:15px;transition:.15s}
+  .btn:hover{background:var(--coralh)}.btn:active{background:var(--coralp)}.btn:disabled{opacity:.5;cursor:default}
+  .row{background:#2a2926;border:1px solid var(--bd);border-radius:13px}
+  .refresh{font-family:'IBM Plex Mono';font-size:11px;color:var(--t3);border:1px solid var(--bd);background:none;border-radius:9px;padding:5px 10px;cursor:pointer}
+  .refresh:hover{background:var(--bg3);color:var(--cream)}
+  ::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:var(--bd);border-radius:4px}
+  @media(max-width:760px){.grid-resp{grid-template-columns:1fr !important}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+const sb = supabase.createClient(window.SUPA_URL, window.SUPA_ANON); // anon só p/ uploadToSignedUrl
+
+function getPass(){ return localStorage.getItem("agendador_pass") || ""; }
+async function api(path, opts={}){
+  const r = await fetch(path, {...opts, headers:{...(opts.headers||{}), "x-app-pass":getPass(), "Content-Type":"application/json"}});
+  if(r.status===401){ localStorage.removeItem("agendador_pass"); location.reload(); throw new Error("senha"); }
+  return r;
+}
+
+const STATUS={scheduled:{l:"agendado",c:"#7AA2C4"},processing:{l:"postando",c:"#D9A957"},published:{l:"no ar",c:"#86B576"},failed:{l:"falhou",c:"#D97757"}};
+function Badge({s}){const x=STATUS[s]||{l:s,c:"#8E8D86"};return <span className="mono" style={{background:x.c+"1f",color:x.c,border:`1px solid ${x.c}44`,padding:"2px 8px",borderRadius:"999px",fontSize:"10px",textTransform:"uppercase",letterSpacing:".06em"}}>{x.l}</span>;}
+function Campo({label,hint,children}){return <label className="f"><span className="lbl">{label}{hint&&<span style={{color:"#5f5e58"}}> · {hint}</span>}</span>{children}</label>;}
+
+function Gate({onOk}){
+  const [p,setP]=useState(""),[err,setErr]=useState(false);
+  async function entrar(){
+    localStorage.setItem("agendador_pass",p);
+    const r=await fetch("/api/posts",{headers:{"x-app-pass":p}});
+    if(r.ok){onOk();}else{localStorage.removeItem("agendador_pass");setErr(true);}
+  }
+  return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
+    <div className="card" style={{padding:"30px",width:"320px",textAlign:"center"}}>
+      <img src="./bixinho.png" style={{height:"54px",imageRendering:"pixelated",margin:"0 auto 14px"}}/>
+      <h1 className="serif" style={{fontSize:"26px",margin:"0 0 4px"}}>Agenda<span style={{fontStyle:"italic"}}>d<span className="vcr">o</span>r</span></h1>
+      <div className="kicker" style={{marginBottom:"18px"}}>Merge · acesso</div>
+      <input type="password" placeholder="senha" value={p} onChange={e=>setP(e.target.value)} onKeyDown={e=>e.key==="Enter"&&entrar()} style={{marginBottom:"10px",textAlign:"center"}}/>
+      {err&&<div style={{color:"var(--coral)",fontSize:"12px",marginBottom:"10px"}}>senha errada</div>}
+      <button className="btn" onClick={entrar}>entrar</button>
+    </div>
+  </div>;
+}
+
+function NovoPost({onSaved}){
+  const [f,setF]=useState({caption:"",keyword:"",oferta:"",link:"",scheduled_at:""});
+  const [file,setFile]=useState(null),[busy,setBusy]=useState(false),[msg,setMsg]=useState(null);
+  const set=(k)=>(e)=>setF({...f,[k]:e.target.value});
+  async function salvar(){
+    if(!file)return setMsg({t:"err",m:"Escolhe o vídeo"});
+    if(!f.caption||!f.keyword||!f.oferta||!f.scheduled_at)return setMsg({t:"err",m:"Faltou legenda, keyword, oferta ou horário"});
+    setBusy(true);setMsg({t:"ok",m:"Subindo vídeo…"});
+    try{
+      const sign=await (await api("/api/sign",{method:"POST",body:JSON.stringify({filename:file.name})})).json();
+      const up=await sb.storage.from("post-videos").uploadToSignedUrl(sign.path,sign.token,file,{contentType:file.type});
+      if(up.error)throw up.error;
+      const ins=await api("/api/posts",{method:"POST",body:JSON.stringify({
+        video_url:sign.publicUrl,caption:f.caption,keyword:f.keyword.toUpperCase(),oferta:f.oferta,
+        link:f.link||null,
+        scheduled_at:new Date(f.scheduled_at).toISOString(),status:"scheduled"})});
+      if(!ins.ok)throw new Error((await ins.json()).error||"erro ao salvar");
+      setMsg({t:"ok",m:"Agendado ✓"});
+      setF({caption:"",keyword:"",oferta:"",link:"",scheduled_at:""});setFile(null);
+      onSaved&&onSaved();
+    }catch(e){setMsg({t:"err",m:"Erro: "+(e.message||e)});}
+    setBusy(false);
+  }
+  return <div className="card" style={{padding:"22px"}}>
+    <h2 className="serif" style={{fontSize:"22px",margin:"0 0 18px"}}>Novo <span style={{fontStyle:"italic",color:"var(--coral)"}}>post</span></h2>
+    <Campo label="Vídeo" hint="o .mov do CapCut — eu converto"><input type="file" accept="video/*" onChange={e=>setFile(e.target.files[0])}/>
+      {file&&<div className="mono" style={{fontSize:"11px",color:"var(--t3)",marginTop:"5px"}}>{file.name} · {(file.size/1e6).toFixed(1)} MB</div>}</Campo>
+    <Campo label="Legenda" hint="com as 5 hashtags"><textarea rows="4" value={f.caption} onChange={set("caption")} placeholder="Comenta CORPS que eu te mando…"/></Campo>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
+      <Campo label="Keyword"><input value={f.keyword} onChange={set("keyword")} placeholder="CORPS"/></Campo>
+      <Campo label="Horário"><input type="datetime-local" value={f.scheduled_at} onChange={set("scheduled_at")}/></Campo></div>
+    <Campo label="Oferta" hint='entra na DM: "pra eu te mandar ___"'><input value={f.oferta} onChange={set("oferta")} placeholder="o link pra se inscrever no Claude Corps"/></Campo>
+    <Campo label="Link" hint="o que a pessoa pega no fim (vai pra Central)"><input value={f.link} onChange={set("link")} placeholder="https://…"/></Campo>
+    {msg&&<div style={{fontSize:"13px",marginBottom:"12px",color:msg.t==="err"?"var(--coral)":"#86B576"}}>{msg.m}</div>}
+    <button className="btn" onClick={salvar} disabled={busy}>{busy?"Agendando…":"Agendar post →"}</button>
+  </div>;
+}
+
+function Fila({posts,reload}){
+  const fmt=(d)=>new Date(d).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+  return <div className="card" style={{padding:"22px"}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"16px"}}>
+      <h2 className="serif" style={{fontSize:"22px",margin:0}}>Fila</h2>
+      <button className="refresh" onClick={reload}>↻ atualizar</button></div>
+    {posts.length===0&&<div className="mono" style={{color:"var(--t3)",fontSize:"12px"}}>nada na fila ainda.</div>}
+    <div style={{display:"flex",flexDirection:"column",gap:"8px",maxHeight:"560px",overflowY:"auto"}}>
+      {posts.map(p=><div key={p.id} className="row" style={{display:"flex",gap:"12px",padding:"13px",alignItems:"center"}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:"8px"}}><span className="serif" style={{fontStyle:"italic",color:"var(--coral)",fontSize:"16px"}}>{p.keyword}</span><Badge s={p.status}/></div>
+          <div style={{fontSize:"12px",color:"var(--t2)",marginTop:"3px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{(p.caption||"").split("\n")[0]}</div>
+          {p.error&&<div className="mono" style={{fontSize:"10px",color:"var(--coral)",marginTop:"3px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>⚠ {p.error.split("\n")[0]}</div>}</div>
+        <div style={{textAlign:"right",flexShrink:0}}><div className="mono" style={{fontSize:"12px",color:"var(--t2)"}}>{fmt(p.scheduled_at)}</div></div>
+      </div>)}
+    </div></div>;
+}
+
+function App(){
+  const [posts,setPosts]=useState([]);
+  async function load(){try{const r=await api("/api/posts");if(r.ok)setPosts(await r.json());}catch(e){}}
+  useEffect(()=>{load();const t=setInterval(load,15000);return()=>clearInterval(t);},[]);
+  const ag=posts.filter(p=>p.status==="scheduled").length;
+  return <div style={{maxWidth:"1000px",margin:"0 auto",padding:"26px 20px"}}>
+    <header style={{display:"flex",alignItems:"center",gap:"16px",marginBottom:"8px"}}>
+      <img src="./bixinho.png" alt="" style={{height:"58px",imageRendering:"pixelated"}}/>
+      <div style={{flex:1}}><div className="kicker" style={{marginBottom:"2px"}}>Merge · máquina de posts</div>
+        <h1 className="serif" style={{fontSize:"34px",margin:0,fontWeight:600,lineHeight:1}}>Agenda<span style={{fontStyle:"italic"}}>d<span className="vcr">o</span>r</span></h1></div>
+      <div style={{textAlign:"right"}}><div className="serif" style={{fontSize:"28px",color:"var(--coral)",fontStyle:"italic",lineHeight:1}}>{ag}</div><div className="kicker">na fila</div></div>
+    </header>
+    <div style={{height:"1px",background:"var(--bd)",margin:"18px 0 24px"}}></div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"20px",alignItems:"start"}} className="grid-resp">
+      <NovoPost onSaved={load}/><Fila posts={posts} reload={load}/></div>
+    <p className="kicker" style={{textAlign:"center",marginTop:"26px",color:"#5f5e58"}}>o worker no seu Mac publica no horário · converte o vídeo · cria a automação A/B · atualiza a Central</p>
+  </div>;
+}
+
+function Root(){
+  const [ok,setOk]=useState(!!getPass());
+  return ok ? <App/> : <Gate onOk={()=>setOk(true)}/>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Root/>);
+</script>
+</body>
+</html>

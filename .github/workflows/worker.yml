@@ -1,0 +1,30 @@
+name: agendador-worker
+# Roda na nuvem do GitHub a cada 5 min e publica os posts cujo horário chegou.
+# (cron do GitHub é "best effort" — pode atrasar alguns minutos em horários de pico.)
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}   # botão de rodar manual
+
+concurrency:
+  group: agendador-worker
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: garante ffmpeg
+        run: ffmpeg -version >/dev/null 2>&1 || sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: worker
+        env:
+          INSTA_TOKEN: ${{ secrets.INSTA_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          INRO_TOKEN: ${{ secrets.INRO_TOKEN }}
+          SKIP_CENTRAL: '1'   # Central roda no Mac (precisa de build); nuvem faz post+Inrō+capa
+        run: python3 engine/worker.py
