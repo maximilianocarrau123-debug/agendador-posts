@@ -113,6 +113,38 @@ def publish_reel(video_url, caption):
     log(f"PUBLICADO media_id={mid}")
     return mid
 
+# ---------- 2b) publica carrossel (imagens) ----------
+def publish_carousel(image_urls, caption):
+    log(f"criando {len(image_urls)} itens de carrossel…")
+    children = []
+    for i, u in enumerate(image_urls, 1):
+        c = _graph_post(f"{IG_USER_ID}/media", is_carousel_item="true", image_url=u)
+        cid = c.get("id")
+        if not cid:
+            raise RuntimeError(f"falha item {i}: {c}")
+        children.append(cid)
+        log(f"item {i}/{len(image_urls)} ok")
+    log("criando container CAROUSEL…")
+    cont = _graph_post(f"{IG_USER_ID}/media", media_type="CAROUSEL",
+                       children=",".join(children), caption=caption)
+    cid = cont.get("id")
+    if not cid:
+        raise RuntimeError(f"falha no container carousel: {cont}")
+    for i in range(1, 31):
+        st = _graph_get(cid, fields="status_code").get("status_code")
+        log(f"status[{i}]: {st}")
+        if st == "FINISHED":
+            break
+        if st == "ERROR":
+            raise RuntimeError("container carousel deu ERROR")
+        time.sleep(8)
+    pub = _graph_post(f"{IG_USER_ID}/media_publish", creation_id=cid)
+    mid = pub.get("id")
+    if not mid:
+        raise RuntimeError(f"falha ao publicar carrossel: {pub}")
+    log(f"CARROSSEL PUBLICADO media_id={mid}")
+    return mid
+
 # ---------- 3) automação Inrō padrão ----------
 def ensure_leads_folder(keyword):
     name = f"Leads · {keyword.upper()}"
@@ -185,10 +217,17 @@ def fetch_cover(media_id, dest):
 
 # ---------- pipeline ----------
 def process_job(job):
-    """job: dict com video, caption, keyword, oferta, caption_keywords, [title]."""
+    """job: dict com video, caption, keyword, oferta, caption_keywords, [title].
+    'video' = URL/caminho de vídeo (Reel) OU um JSON array de URLs de imagem (carrossel)."""
     log(f"=== JOB {job.get('keyword')} @ {time.strftime('%H:%M:%S')} ===")
-    video_url = ensure_public_video(job["video"])
-    media_id = publish_reel(video_url, job["caption"])
+    v = (job["video"] or "").strip()
+    if v.startswith("["):                       # carrossel de imagens
+        image_urls = json.loads(v)
+        media_id = publish_carousel(image_urls, job["caption"])
+        video_url = v
+    else:                                       # Reel (vídeo)
+        video_url = ensure_public_video(job["video"])
+        media_id = publish_reel(video_url, job["caption"])
     title = job.get("title") or f"{job['keyword'].upper()} · comment→DM (follow-gate)"
     sid = create_inro_automation(title, job["caption_keywords"], job["keyword"], job["oferta"])
     cover = None

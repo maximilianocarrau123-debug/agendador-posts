@@ -21,14 +21,21 @@ def process(post):
         buf.append(f"{time.strftime('%H:%M:%S')} {m}")
         print(f"[worker:{pid[:8]}] {m}", flush=True)
     try:
-        # baixa o vídeo do storage pra local (engine converte → H.264 garantido)
-        vtmp = os.path.join(tempfile.gettempdir(), f"post-{pid}.src")
-        step("baixando vídeo…")
-        supa.download_video(post["video_url"], vtmp)
+        vu = (post["video_url"] or "").strip()
+        if vu.startswith("["):
+            # carrossel: video_url é um JSON array de URLs de imagem → passa direto
+            step(f"carrossel ({len(json.loads(vu))} imagens)…")
+            video_field = vu
+        else:
+            # reel: baixa o vídeo pra local (engine converte → H.264 garantido)
+            vtmp = os.path.join(tempfile.gettempdir(), f"post-{pid}.src")
+            step("baixando vídeo…")
+            supa.download_video(post["video_url"], vtmp)
+            video_field = vtmp
 
         caption_keywords = post.get("caption_keywords") or _auto_caption_kw(post["caption"])
         job = {
-            "video": vtmp,
+            "video": video_field,
             "caption": post["caption"],
             "keyword": post["keyword"],
             "oferta": post["oferta"],
