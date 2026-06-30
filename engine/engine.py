@@ -203,7 +203,15 @@ def create_inro_automation(title, caption_keywords, keyword, oferta, aliases=Non
     log(f"automação Inrō criada: scenario {sid}")
     return sid
 
-# ---------- 4) capa real ----------
+# ---------- 4) capa ----------
+def first_frame_cover(video_path, dest):
+    """Pega o 1º frame do vídeo como capa (pronta na hora, sem esperar o IG)."""
+    subprocess.run(["ffmpeg", "-y", "-ss", "0.3", "-i", os.path.expanduser(video_path),
+                    "-vframes", "1", "-vf", "scale=1080:-1", dest],
+                   check=True, capture_output=True)
+    log(f"capa (1º frame) salva: {dest}")
+    return dest
+
 def fetch_cover(media_id, dest):
     for i in range(1, 13):
         thumb = _graph_get(media_id, fields="thumbnail_url").get("thumbnail_url")
@@ -232,7 +240,12 @@ def process_job(job):
     sid = create_inro_automation(title, job["caption_keywords"], job["keyword"], job["oferta"])
     cover = None
     if job.get("cover_dest"):
-        cover = fetch_cover(media_id, os.path.expanduser(job["cover_dest"]))
+        dest = os.path.expanduser(job["cover_dest"])
+        src = os.path.expanduser(job["video"])
+        if (not v.startswith("[")) and os.path.exists(src):
+            cover = first_frame_cover(src, dest)          # reel: 1º frame (na hora)
+        else:
+            cover = fetch_cover(media_id, dest)            # carrossel/sem arquivo: thumbnail do IG
     return {"media_id": media_id, "scenario_id": sid, "cover": cover, "video_url": video_url}
 
 if __name__ == "__main__":
