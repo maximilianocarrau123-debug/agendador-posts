@@ -161,7 +161,7 @@ def _dm_variants(keyword, oferta):
         f"{abre}\n\nPra eu te mandar {oferta} é rapidinho: me segue aqui 👉 só libero "
         f"pra quem segue.\n\nDepois é só ir na minha BIO 👆, clicar no link e entrar no "
         f"grupo — é lá dentro que vai o material + coisa nova toda semana.\n\n{fecho}\n\n"
-        f"⚠️ Importante: SEM ME SEGUIR, não libero.")
+        f"⚠️ IMPORTANTE: SEM ME SEGUIR, NÃO LIBERO.")
     return [
         base("Eaí! 🙌 Você já tá me seguindo?", "Corre que isso voa! 🚀"),
         base("Opa! 🔥 Antes de tudo: já me segue?", "Bora, não perde! 🚀"),
